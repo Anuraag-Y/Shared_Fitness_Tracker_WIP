@@ -5,9 +5,13 @@ create table if not exists members (
   id text primary key,
   name text not null,
   goal int default 4,
+  dir text default 'gain',
   unit text default 'lb',
   created_at timestamptz default now()
 );
+
+-- If you created the tables before the weight-goal feature, run this one line:
+alter table members add column if not exists dir text default 'gain';
 
 create table if not exists sessions (
   id bigserial primary key,

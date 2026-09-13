@@ -13,5 +13,8 @@ window.CONFIG = {
   LIFTS: ['Bench press', 'Squat', 'Deadlift', 'Overhead press', 'Barbell row', 'Pull-ups'],
 
   // Points: 1 per session, plus this bonus for hitting your weekly goal.
-  GOAL_BONUS: 2
+  GOAL_BONUS: 2,
+
+  // Who can remove people from the group.
+  ADMIN: 'anuraag'
 };

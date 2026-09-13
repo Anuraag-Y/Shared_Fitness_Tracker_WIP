@@ -35,6 +35,8 @@
   .row { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; text-align: left; background: transparent; border: none; border-top: 1px solid var(--color-neutral-900); }
   .row:hover { background: #1c1f31; }
   .card { padding: 16px; background: var(--color-surface); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+  button.card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; text-align: left; border: none; }
+  button.card:hover { box-shadow: var(--shadow-md); }
   ::selection { background: var(--color-accent-800); }
 </style>
 </head>

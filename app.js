@@ -28,6 +28,11 @@ async function patch(table, query, body) {
   return r.json();
 }
 
+async function del(table, query) {
+  const r = await fetch(`${C.SUPABASE_URL}/rest/v1/${table}?${query}`, { method: 'DELETE', headers: H });
+  if (!r.ok) throw new Error(table + ': ' + await r.text());
+}
+
 /* ---------- state ---------- */
 
 const SPLITS = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Chest', 'Back', 'Arms', 'Shoulders', 'Full body', 'Cardio'];
@@ -48,7 +53,7 @@ const S = {
   draft: { split: '', note: '', weight: '', rows: [blankRow()] },
   msg: '', error: ''
 };
-function blankRow() { return { ex: '', sets: '', reps: '', weight: '' }; }
+function blankRow() { return { ex: '', sets: '', reps: '', fail: false, weight: '', weight2: '' }; }
 
 /* ---------- dates ---------- */
 
@@ -150,7 +155,7 @@ function viewLogin() {
 
 function chrome(inner) {
   const me = S.members.find(m => m.id === S.me) || { name: '?' };
-  const tabs = [['board', 'Board'], ['log', 'Log'], ['people', 'People'], ['history', 'History']];
+  const tabs = [['board', 'Board'], ['week', 'Weekly'], ['log', 'Log'], ['people', 'People'], ['history', 'History']];
   set(`
   <div style="min-height:100vh">
     <div style="position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 20px;background:rgba(22,24,38,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--color-neutral-900)">
@@ -172,7 +177,8 @@ function chrome(inner) {
 }
 
 function viewBoard() {
-  const ranked = S.members.map(m => Object.assign({ m }, score(m))).sort((a, b) => b.pts - a.pts || b.n - a.n);
+  const eligible = S.members.filter(m => sessionsOf(m.id).length > 0);
+  const ranked = (eligible.length ? eligible : S.members).map(m => Object.assign({ m }, score(m))).sort((a, b) => b.pts - a.pts || b.n - a.n);
   if (!ranked.length) return chrome(`<p style="color:var(--color-neutral-400)">Nobody has joined yet.</p>`);
   const last = ranked[ranked.length - 1];
   const imps = S.members.map(m => ({ m, gain: improvement(m.id) })).sort((a, b) => b.gain - a.gain);
@@ -265,15 +271,24 @@ function viewLog() {
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
       ${d.rows.map((r, i) => `
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 56px 70px 28px;gap:6px;align-items:center">
-          <input data-row="${i}" data-k="ex" value="${esc(r.ex)}" placeholder="Exercise" style="font-size:13px">
-          <input data-row="${i}" data-k="sets" value="${esc(r.sets)}" placeholder="sets" class="mono" style="font-size:13px;text-align:center" inputmode="numeric">
-          <input data-row="${i}" data-k="reps" value="${esc(r.reps)}" placeholder="reps" class="mono" style="font-size:13px;text-align:center" inputmode="numeric">
-          <input data-row="${i}" data-k="weight" value="${esc(r.weight)}" placeholder="${S.unit}" class="mono" style="font-size:13px;text-align:center" inputmode="decimal">
-          <button data-act="delrow" data-i="${i}" style="background:transparent;border:none;color:var(--color-neutral-600);font-size:15px">×</button>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--color-neutral-900)">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 28px;gap:6px;align-items:center">
+            <input data-row="${i}" data-k="ex" value="${esc(r.ex)}" placeholder="Exercise" style="font-size:13px">
+            <button data-act="delrow" data-i="${i}" style="background:transparent;border:none;color:var(--color-neutral-600);font-size:15px">×</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <input data-row="${i}" data-k="sets" value="${esc(r.sets)}" placeholder="sets" class="mono" style="width:52px;font-size:13px;text-align:center" inputmode="numeric">
+            <span class="mono" style="font-size:12px;color:var(--color-neutral-700)">×</span>
+            <input data-row="${i}" data-k="reps" value="${esc(r.reps)}" placeholder="reps" class="mono" style="width:52px;font-size:13px;text-align:center" inputmode="numeric">
+            <button class="chip" data-act="fail" data-i="${i}" data-on="${r.fail ? 1 : 0}" style="font-size:11px;padding:5px 10px" title="Taken to failure">to failure</button>
+            <span class="mono" style="font-size:12px;color:var(--color-neutral-700);margin-left:4px">@</span>
+            <input data-row="${i}" data-k="weight" value="${esc(r.weight)}" placeholder="${S.unit}" class="mono" style="width:62px;font-size:13px;text-align:center" inputmode="decimal">
+            <span class="mono" style="font-size:12px;color:var(--color-neutral-700)">→</span>
+            <input data-row="${i}" data-k="weight2" value="${esc(r.weight2)}" placeholder="drop" class="mono" style="width:62px;font-size:13px;text-align:center" inputmode="decimal">
+          </div>
         </div>`).join('')}
     </div>
-    <div style="font-size:12px;color:var(--color-neutral-600);margin-top:10px;line-height:1.5">Rows that beat your current best are saved as a PR automatically.</div>
+    <div style="font-size:12px;color:var(--color-neutral-600);margin-top:10px;line-height:1.55">Leave the drop field empty for a straight set. Top weight counts for PRs.</div>
 
     <div style="margin-top:26px;padding-top:22px;border-top:1px solid var(--color-neutral-900);display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       <label style="display:flex;flex-direction:column;gap:6px">
@@ -300,7 +315,7 @@ function viewPeople() {
         </div>
         <div class="mono" style="font-size:12px;color:var(--color-neutral-500);line-height:1.7">
           ${s.n}/${m.goal || 4} this week · ${plural(s.pts, 'pt')}<br>
-          ${w ? show1(w.lb) + S.unit + ' · ' : ''}${sessionsOf(m.id).length} sessions logged
+          ${w ? show1(w.lb) + S.unit + ' · ' : ''}${plural(sessionsOf(m.id).length, 'session')} logged
         </div>
       </button>`;
     }).join('')}
@@ -311,6 +326,7 @@ function viewPerson() {
   const p = S.members.find(m => m.id === S.personId);
   if (!p) return viewPeople();
   const s = score(p), mine = p.id === S.me;
+  const canRemove = S.me === C.ADMIN && !mine;
   const bw = weightsOf(p.id).slice(-10);
   const lo = bw.length ? Math.min(...bw.map(x => Number(x.lb))) - 3 : 0;
   const hi = bw.length ? Math.max(...bw.map(x => Number(x.lb))) + 1 : 1;
@@ -325,15 +341,23 @@ function viewPerson() {
     <h1 class="h1" style="font-size:32px">${esc(p.name)}</h1>
     <div style="font-size:13px;color:var(--color-neutral-500)">${s.n}/${p.goal || 4} this week · ${plural(s.pts, 'pt')} · ${plural(streak(p), 'week')} streak</div>
   </div>
-  <div style="font-size:13px;color:var(--color-neutral-400);margin-bottom:28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <div style="font-size:13px;color:var(--color-neutral-400);margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span>Weekly goal: ${p.goal || 4} sessions.</span>
     ${mine ? `<button class="chip" data-act="goal" style="font-size:12px;padding:3px 10px">Change</button>` : ''}
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:28px">
+    <span class="kicker" style="font-size:11px;color:var(--color-neutral-600)">Weight goal</span>
+    ${mine
+      ? `<button class="chip" data-act="dir" data-v="gain" data-on="${(p.dir || 'gain') === 'gain' ? 1 : 0}" style="font-size:12px;padding:5px 12px">Gaining</button>
+         <button class="chip" data-act="dir" data-v="lose" data-on="${(p.dir || 'gain') === 'lose' ? 1 : 0}" style="font-size:12px;padding:5px 12px">Cutting</button>`
+      : `<span style="font-size:13px;color:var(--color-neutral-300)">${(p.dir || 'gain') === 'gain' ? 'Gaining' : 'Cutting'}</span>`}
+    ${canRemove ? `<button class="chip" data-act="remove" data-id="${esc(p.id)}" style="margin-left:auto;font-size:12px;padding:5px 12px;color:var(--color-neutral-600)">Remove from group</button>` : ''}
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:26px;align-items:start">
     <div>
       <div class="kicker" style="margin-bottom:14px">Bodyweight (${S.unit})</div>
-      ${bw.length ? `
+      ${bw.length > 1 ? `
       <div style="display:flex;align-items:flex-end;gap:5px;height:120px">
         ${bw.map(x => `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
           <div class="mono" style="font-size:9px;color:var(--color-neutral-600);text-align:center;margin-bottom:4px">${show1(x.lb)}</div>
@@ -342,6 +366,10 @@ function viewPerson() {
       </div>
       <div class="mono" style="display:flex;justify-content:space-between;font-size:10px;color:var(--color-neutral-700);margin-top:6px">
         <span>${short(bw[0].date)}</span><span>${short(bw[bw.length - 1].date)}</span>
+      </div>` : bw.length === 1 ? `
+      <div>
+        <div style="font-family:var(--font-heading);font-weight:500;font-size:26px;letter-spacing:-.01em">${show1(bw[0].lb)}${S.unit}</div>
+        <div class="mono" style="font-size:12px;color:var(--color-neutral-600);margin-top:5px">measured ${short(bw[0].date)} · log another to see the trend</div>
       </div>` : `<div style="font-size:13px;color:var(--color-neutral-600)">No weigh-ins yet.</div>`}
 
       <div class="kicker" style="margin:30px 0 12px">Sessions per week</div>
@@ -387,6 +415,57 @@ function viewPerson() {
   </div>`);
 }
 
+function viewWeek() {
+  chrome(`
+  <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+    <h1 class="h1">Weekly summaries</h1>
+    <div class="mono" style="font-size:12px;color:var(--color-neutral-600)">Week of ${weekStart(0).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+  </div>
+  <p style="margin:0 0 26px;font-size:13px;color:var(--color-neutral-500)">Where everyone stands against last week.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px">
+    ${S.members.map(m => {
+      const n = sessionsOf(m.id).filter(s => inWeek(s.date, 0)).length;
+      const prev = sessionsOf(m.id).filter(s => inWeek(s.date, 1)).length;
+      const d = n - prev;
+      const ws = weightsOf(m.id);
+      const start = weekStart(0);
+      const before = ws.filter(w => new Date(w.date + 'T12:00:00') < start).slice(-1)[0];
+      const thisWeek = ws.filter(w => inWeek(w.date, 0));
+      const now = ws[ws.length - 1];
+      const base = before || thisWeek[0];
+      const measured = base && now && base !== now;
+      const diff = measured ? Number(now.lb) - Number(base.lb) : 0;
+      const moved = measured && diff !== 0;
+      const dir = m.dir || 'gain';
+      const onTrack = moved && (dir === 'gain' ? diff > 0 : diff < 0);
+      const newPRs = S.prs.filter(p => p.member_id === m.id && inWeek(p.date, 0));
+      return `<button class="card" data-act="person" data-id="${esc(m.id)}" style="text-align:left;border:none;padding:18px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+          <span style="width:26px;height:26px;display:grid;place-items:center;font-size:12px;color:var(--color-accent-200);background:var(--color-accent-800);border-radius:999px">${esc(m.name[0])}</span>
+          <span style="font-size:16px">${esc(m.name)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <div>
+            <div class="kicker" style="font-size:10px;color:var(--color-neutral-600);margin-bottom:6px">Sessions</div>
+            <div style="font-family:var(--font-heading);font-weight:500;font-size:20px">${n} of ${m.goal || 4}</div>
+            <div class="mono" style="font-size:11px;color:var(--color-accent-300);margin-top:4px">${d === 0 ? 'same as last week' : (d > 0 ? '+' + d : d) + ' vs last week'}</div>
+          </div>
+          <div>
+            <div class="kicker" style="font-size:10px;color:var(--color-neutral-600);margin-bottom:6px">Bodyweight · ${dir === 'gain' ? 'gaining' : 'cutting'}</div>
+            <div style="font-family:var(--font-heading);font-weight:500;font-size:20px">${now ? show1(now.lb) + S.unit : 'no weigh-in'}</div>
+            <div class="mono" style="font-size:11px;margin-top:4px;color:${!moved ? 'var(--color-neutral-600)' : (onTrack ? 'var(--color-accent-300)' : 'var(--color-neutral-500)')}">${!now ? '—' : (!measured ? 'first weigh-in' : (moved ? (diff > 0 ? '+' : '') + show1(diff) + S.unit + (onTrack ? ' toward goal' : ' wrong way') : 'flat this week'))}</div>
+          </div>
+        </div>
+        <div style="margin-top:auto;padding-top:14px;border-top:1px solid var(--color-neutral-900)">
+          <div class="kicker" style="font-size:10px;color:var(--color-neutral-600);margin-bottom:8px">New PRs</div>
+          ${newPRs.length ? newPRs.map(p => `<div style="font-size:13px;color:var(--color-neutral-300);margin-bottom:5px">${esc(p.lift)} — ${show(p.weight)}${S.unit} × ${p.reps}</div>`).join('')
+            : `<div style="font-size:13px;color:var(--color-neutral-700)">None this week.</div>`}
+        </div>
+      </button>`;
+    }).join('') || `<p style="color:var(--color-neutral-500)">Nobody has joined yet.</p>`}
+  </div>`);
+}
+
 function viewHistory() {
   const labels = [5, 4, 3, 2, 1, 0].map(o => weekStart(o).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }));
   chrome(`
@@ -415,6 +494,7 @@ function render() {
   if (S.screen === 'log') return viewLog();
   if (S.screen === 'people') return viewPeople();
   if (S.screen === 'person') return viewPerson();
+  if (S.screen === 'week') return viewWeek();
   if (S.screen === 'history') return viewHistory();
   viewBoard();
 }
@@ -449,7 +529,7 @@ document.addEventListener('click', async e => {
     if (code !== C.GROUP_CODE.toUpperCase()) { err.textContent = 'Wrong group code.'; return; }
     const id = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!S.members.some(m => m.id === id)) {
-      try { await post('members', [{ id, name, goal: 4 }]); } catch (x) { err.textContent = String(x.message).slice(0, 120); return; }
+      try { await post('members', [{ id, name, goal: 4, dir: 'gain' }]); } catch (x) { err.textContent = String(x.message).slice(0, 120); return; }
     }
     S.me = id; localStorage.setItem('board.user', id);
     await load(); return;
@@ -460,11 +540,29 @@ document.addEventListener('click', async e => {
   if (act === 'person') { S.personId = t.dataset.id; S.screen = 'person'; render(); return; }
   if (act === 'unit') { S.unit = S.unit === 'lb' ? 'kg' : 'lb'; localStorage.setItem('board.unit', S.unit); render(); return; }
   if (act === 'split') { readDraftFields(); S.draft.split = S.draft.split === t.dataset.v ? '' : t.dataset.v; render(); return; }
+  if (act === 'fail') { readDraftFields(); const r = S.draft.rows[Number(t.dataset.i)]; r.fail = !r.fail; render(); return; }
   if (act === 'addrow') { readDraftFields(); S.draft.rows.push(blankRow()); render(); return; }
   if (act === 'delrow') {
     readDraftFields();
     if (S.draft.rows.length > 1) S.draft.rows.splice(Number(t.dataset.i), 1); else S.draft.rows = [blankRow()];
     render(); return;
+  }
+  if (act === 'remove') {
+    const id = t.dataset.id;
+    const who = (S.members.find(m => m.id === id) || {}).name || id;
+    if (!confirm('Remove ' + who + ' and everything they logged? This cannot be undone.')) return;
+    try {
+      await del('sessions', 'member_id=eq.' + encodeURIComponent(id));
+      await del('prs', 'member_id=eq.' + encodeURIComponent(id));
+      await del('weights', 'member_id=eq.' + encodeURIComponent(id));
+      await del('members', 'id=eq.' + encodeURIComponent(id));
+    } catch (x) { alert('Could not remove: ' + x.message); return; }
+    S.screen = 'people'; S.personId = null;
+    await load(); return;
+  }
+  if (act === 'dir') {
+    await patch('members', 'id=eq.' + encodeURIComponent(S.me), { dir: t.dataset.v });
+    await load(); return;
   }
   if (act === 'goal') {
     const v = prompt('Sessions per week?', String((S.members.find(m => m.id === S.me) || {}).goal || 4));
@@ -484,7 +582,12 @@ document.addEventListener('click', async e => {
     const d = S.draft;
     const rows = d.rows.filter(r => r.ex.trim());
     if (!d.split && !d.note.trim() && !rows.length) { S.msg = 'Pick a split or write something first.'; render(); return; }
-    const extra = rows.map(r => [r.sets && r.reps ? r.sets + 'x' + r.reps : '', r.ex, r.weight ? r.weight + S.unit : ''].filter(Boolean).join(' ')).join(', ');
+    const extra = rows.map(r => {
+      const sr = r.sets && r.reps ? r.sets + '×' + r.reps : (r.sets ? r.sets + ' sets' : '');
+      const f = r.fail ? (sr ? ' to failure' : 'to failure') : '';
+      const w = r.weight ? (r.weight2 ? r.weight + '→' + r.weight2 : r.weight) + S.unit : '';
+      return [sr + f, r.ex.trim(), w].filter(Boolean).join(' ');
+    }).join(', ');
     const note = [d.note.trim(), extra].filter(Boolean).join(' · ');
     try {
       await post('sessions', [{ member_id: S.me, date: iso(today()), split: d.split || 'Full body', note }]);
