@@ -561,7 +561,14 @@ document.addEventListener('click', async e => {
     await load(); return;
   }
   if (act === 'dir') {
-    await patch('members', 'id=eq.' + encodeURIComponent(S.me), { dir: t.dataset.v });
+    try {
+      await patch('members', 'id=eq.' + encodeURIComponent(S.me), { dir: t.dataset.v });
+    } catch (x) {
+      alert(/dir/.test(x.message)
+        ? 'Your database is missing the weight-goal column. In the Supabase SQL editor run:\n\nalter table members add column if not exists dir text default \'gain\';'
+        : 'Could not save: ' + x.message);
+      return;
+    }
     await load(); return;
   }
   if (act === 'goal') {
