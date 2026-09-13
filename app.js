@@ -130,11 +130,11 @@ function viewLogin() {
       <div style="display:flex;flex-direction:column;gap:14px">
         <label style="display:flex;flex-direction:column;gap:6px">
           <span class="kicker">Your name</span>
-          <input id="u" placeholder="Anuraag" autocapitalize="words" autocomplete="off">
+          <input id="u" placeholder="" autocapitalize="words" autocomplete="off">
         </label>
         <label style="display:flex;flex-direction:column;gap:6px">
           <span class="kicker">Group code</span>
-          <input id="c" class="mono" placeholder="${esc(C.GROUP_CODE)}" style="letter-spacing:.08em" autocapitalize="characters">
+          <input id="c" class="mono" placeholder="" style="letter-spacing:.08em" autocapitalize="characters">
         </label>
         <button class="outline" data-act="login" style="margin-top:6px">Enter the group</button>
         <div id="err" style="font-size:12px;color:var(--color-accent-300);min-height:16px"></div>
