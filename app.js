@@ -63,6 +63,7 @@ function inWeek(dateStr, back) {
   const d = new Date(dateStr + 'T12:00:00'); return d >= s && d < e;
 }
 const short = s => { const d = new Date(s + 'T12:00:00'); return (d.getMonth() + 1) + '/' + d.getDate(); };
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 
 /* ---------- units ---------- */
 
@@ -129,7 +130,7 @@ function viewLogin() {
       <div style="display:flex;flex-direction:column;gap:14px">
         <label style="display:flex;flex-direction:column;gap:6px">
           <span class="kicker">Your name</span>
-          <input id="u" placeholder="Anuraag" autocapitalize="words">
+          <input id="u" placeholder="Anuraag" autocapitalize="words" autocomplete="off">
         </label>
         <label style="display:flex;flex-direction:column;gap:6px">
           <span class="kicker">Group code</span>
@@ -137,6 +138,7 @@ function viewLogin() {
         </label>
         <button class="outline" data-act="login" style="margin-top:6px">Enter the group</button>
         <div id="err" style="font-size:12px;color:var(--color-accent-300);min-height:16px"></div>
+        <div style="font-size:12px;color:var(--color-neutral-600);line-height:1.5">First time? Type your name and it makes your account.</div>
         ${S.members.length ? `<div class="kicker" style="margin-top:8px">Already here</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
           ${S.members.map(m => `<button class="chip" data-act="quick" data-id="${esc(m.id)}">${esc(m.name)}</button>`).join('')}
@@ -187,7 +189,7 @@ function viewBoard() {
     <div class="card">
       <div class="kicker" style="color:var(--color-accent-400);margin-bottom:10px">Leading</div>
       <div style="font-family:var(--font-heading);font-weight:500;font-size:22px">${esc(ranked[0].m.name)}</div>
-      <div style="font-size:13px;color:var(--color-neutral-400);margin-top:5px">${ranked[0].pts} pts · ${ranked[0].n} sessions</div>
+      <div style="font-size:13px;color:var(--color-neutral-400);margin-top:5px">${plural(ranked[0].pts, 'pt')} · ${plural(ranked[0].n, 'session')}</div>
     </div>
     <div class="card">
       <div class="kicker" style="color:var(--color-accent-400);margin-bottom:10px">Most improved</div>
@@ -196,8 +198,8 @@ function viewBoard() {
     </div>
     <div class="card" style="background:linear-gradient(160deg,#2b2741 0%,var(--color-surface) 70%)">
       <div class="kicker" style="color:var(--color-accent-300);margin-bottom:10px">Dust Collector</div>
-      <div style="font-family:var(--font-heading);font-weight:500;font-size:22px">${esc(last.m.name)}</div>
-      <div style="font-size:13px;color:var(--color-neutral-300);margin-top:5px;line-height:1.45">${esc(ROASTS[last.m.name.length % ROASTS.length])}</div>
+      <div style="font-family:var(--font-heading);font-weight:500;font-size:22px">${esc(ranked.length > 1 ? last.m.name : '—')}</div>
+      <div style="font-size:13px;color:var(--color-neutral-300);margin-top:5px;line-height:1.45">${ranked.length > 1 ? esc(ROASTS[last.m.name.length % ROASTS.length]) : 'Needs at least two of you. Send the group code around.'}</div>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:26px;align-items:start">
@@ -214,7 +216,7 @@ function viewBoard() {
             <span style="display:block;margin-top:5px;height:3px;background:var(--color-neutral-900);border-radius:999px;overflow:hidden">
               <span style="display:block;height:3px;background:var(--color-accent);width:${Math.round(Math.min(1, r.n / (r.m.goal || 4)) * 100)}%"></span>
             </span>
-            <span class="mono" style="display:block;font-size:11px;color:var(--color-neutral-600);margin-top:5px">${r.n}/${r.m.goal || 4} sessions · ${streak(r.m)} week streak</span>
+            <span class="mono" style="display:block;font-size:11px;color:var(--color-neutral-600);margin-top:5px">${r.n}/${r.m.goal || 4} sessions · ${plural(streak(r.m), 'week')} streak</span>
           </span>
           <span style="font-family:var(--font-heading);font-weight:500;font-size:20px">${r.pts}</span>
         </button>`).join('')}
@@ -297,7 +299,7 @@ function viewPeople() {
           <span style="font-size:16px">${esc(m.name)}</span>
         </div>
         <div class="mono" style="font-size:12px;color:var(--color-neutral-500);line-height:1.7">
-          ${s.n}/${m.goal || 4} this week · ${s.pts} pts<br>
+          ${s.n}/${m.goal || 4} this week · ${plural(s.pts, 'pt')}<br>
           ${w ? show1(w.lb) + S.unit + ' · ' : ''}${sessionsOf(m.id).length} sessions logged
         </div>
       </button>`;
@@ -321,7 +323,7 @@ function viewPerson() {
   <button data-act="go" data-screen="people" style="padding:0;margin-bottom:16px;font-size:12px;color:var(--color-neutral-500);background:transparent;border:none">← Everyone</button>
   <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px">
     <h1 class="h1" style="font-size:32px">${esc(p.name)}</h1>
-    <div style="font-size:13px;color:var(--color-neutral-500)">${s.n}/${p.goal || 4} this week · ${s.pts} pts · ${streak(p)} week streak</div>
+    <div style="font-size:13px;color:var(--color-neutral-500)">${s.n}/${p.goal || 4} this week · ${plural(s.pts, 'pt')} · ${plural(streak(p), 'week')} streak</div>
   </div>
   <div style="font-size:13px;color:var(--color-neutral-400);margin-bottom:28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span>Weekly goal: ${p.goal || 4} sessions.</span>
